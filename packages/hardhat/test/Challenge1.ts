@@ -81,69 +81,72 @@ describe("🚩 Challenge 1: 🔏 Decentralized Staking App", function () {
           console.log("\t", " 🥁 complete: ", result);
           expect(result).to.equal(true);
         });
-
         it("Should redeploy Staker, stake, not get enough, and withdraw", async function () {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const [owner, secondAccount] = await ethers.getSigners();
+  const [owner, secondAccount] = await ethers.getSigners();
 
-          const ExampleExternalContract = await ethers.getContractFactory("ExampleExternalContract");
-          exampleExternalContract = await ExampleExternalContract.deploy();
-          const exampleExternalContractAddress = await exampleExternalContract.getAddress();
+  const ExampleExternalContract = await ethers.getContractFactory("ExampleExternalContract");
+  exampleExternalContract = await ExampleExternalContract.deploy();
+  const exampleExternalContractAddress = await exampleExternalContract.getAddress();
 
-          const Staker = await ethers.getContractFactory("Staker");
+  const Staker = await ethers.getContractFactory("Staker");
+  stakerContract = await Staker.deploy(exampleExternalContractAddress);
 
-          stakerContract = await Staker.deploy(exampleExternalContractAddress);
+  console.log("\t", " 🔨 Staking...");
+  const initialBalance = await ethers.provider.getBalance(secondAccount.address);
 
-          console.log("\t", " 🔨 Staking...");
-          const stakeResult = await stakerContract.connect(secondAccount).stake({
-            value: ethers.parseEther("0.001"),
-          });
-          console.log("\t", " 🏷  stakeResult: ", stakeResult.hash);
+  const stakeTx = await stakerContract.connect(secondAccount).stake({
+    value: ethers.parseEther("0.001"),
+  });
+  console.log("\t", " 🏷  stakeResult: ", stakeTx.hash);
 
-          console.log("\t", " ⏳ Waiting for confirmation...");
-          const txResult = await stakeResult.wait();
-          expect(txResult?.status).to.equal(1);
+  console.log("\t", " ⏳ Waiting for confirmation...");
+  const stakeReceipt = await stakeTx.wait();
 
-          console.log("\t", " ⌛️ fast forward time...");
-          await network.provider.send("evm_increaseTime", [72 * 3600]);
-          await network.provider.send("evm_mine");
+  // Fix: Ensure gasCost calculation uses BigNumber correctly
+  // Use gasUsed and gasPrice directly (no need for BigNumber.from)
+  const gasUsed = stakeReceipt.gasUsed; // Already a BigNumber
+  const gasPrice = stakeTx.gasPrice; // Should also be a BigNumber
+  //const stakeGasCost = gasUsed.mul(gasPrice);
 
-          console.log("\t", " 🎉 calling execute");
-          const execResult = await stakerContract.execute();
-          console.log("\t", " 🏷  execResult: ", execResult.hash);
+  const balanceAfterStake = await ethers.provider.getBalance(secondAccount.address);
+  const expectedBalanceAfterStake = initialBalance.sub(ethers.parseEther("0.001")).sub(stakeGasCost);
 
-          const result = await exampleExternalContract.completed();
-          console.log("\t", " 🥁 complete should be false: ", result);
-          expect(result).to.equal(false);
+  console.log("\t", " 🔍 Validating balance after staking...");
+  expect(balanceAfterStake).to.equal(expectedBalanceAfterStake);
 
-          const startingBalance = await ethers.provider.getBalance(secondAccount.address);
-          //console.log("startingBalance before withdraw", ethers.formatEther(startingBalance))
+  console.log("\t", " ⌛️ fast forward time...");
+  await network.provider.send("evm_increaseTime", [72 * 3600]);
+  await network.provider.send("evm_mine");
 
-          console.log("\t", " 💵 calling withdraw");
-          const withdrawResult = await stakerContract.connect(secondAccount).withdraw();
-          console.log("\t", " 🏷  withdrawResult: ", withdrawResult.hash);
+  console.log("\t", " 🎉 calling execute");
+  const execResult = await stakerContract.execute();
+  console.log("\t", " 🏷  execResult: ", execResult.hash);
 
-          // need to account for the gas cost from calling withdraw
-          const tx = await ethers.provider.getTransaction(withdrawResult.hash);
+  const result = await exampleExternalContract.completed();
+  console.log("\t", " 🥁 complete should be false: ", result);
+  expect(result).to.equal(false);
 
-          if (!tx) {
-            throw new Error("Cannot resolve transaction");
-          }
+  const startingBalance = await ethers.provider.getBalance(secondAccount.address);
+  console.log("\t", " 💵 calling withdraw");
+  const withdrawTx = await stakerContract.connect(secondAccount).withdraw();
+  console.log("\t", " 🏷  withdrawResult: ", withdrawTx.hash);
 
-          const receipt = await ethers.provider.getTransactionReceipt(withdrawResult.hash);
+  const withdrawReceipt = await withdrawTx.wait();
 
-          if (!receipt) {
-            throw new Error("Cannot resolve receipt");
-          }
+  // Fix: Ensure withdraw gas cost uses BigNumber operations
+  const withdrawGasUsed = ethers.BigNumber.from(withdrawReceipt.gasUsed);
+  const withdrawGasPrice = ethers.BigNumber.from(withdrawTx.gasPrice);
+  const withdrawGasCost = withdrawGasUsed.mul(withdrawGasPrice);
 
-          const gasCost = tx.gasPrice * receipt.gasUsed;
+  const endingBalance = await ethers.provider.getBalance(secondAccount.address);
+  const expectedEndingBalance = startingBalance.add(ethers.parseEther("0.001")).sub(withdrawGasCost);
 
-          const endingBalance = await ethers.provider.getBalance(secondAccount.address);
-          //console.log("endingBalance after withdraw", ethers.formatEther(endingBalance))
+  console.log("\t", " 🔍 Validating balance after withdrawing...");
+  expect(endingBalance).to.equal(expectedEndingBalance);
+});
 
-          expect(endingBalance).to.equal(startingBalance + ethers.parseEther("0.001") - gasCost);
-        });
-      }
+
+       }
     });
   });
 });
