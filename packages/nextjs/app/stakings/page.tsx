@@ -5,6 +5,8 @@ import { formatEther } from "viem";
 import { Address } from "~~/components/scaffold-eth";
 import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
 
+type EventArgs = [string, bigint]; // Adjust to match the actual structure
+
 const Stakings: NextPage = () => {
   const { data: stakeEvents, isLoading } = useScaffoldEventHistory({
     contractName: "Staker",
@@ -45,7 +47,7 @@ const Stakings: NextPage = () => {
                 return (
                   <tr key={index}>
                     <td>
-                      <Address address={event.args?.[0]} />
+                      <Address address={event.args?.[0] as string} />
                     </td>
                     <td>{formatEther(event.args?.[1] || 0n)} ETH</td>
                   </tr>
